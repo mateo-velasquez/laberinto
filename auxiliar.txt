@@ -1,0 +1,1058 @@
+RectanguloParede:
+	mov x10, x0					// Reseteo la dirección, para que x10 tenga la dirección inicial
+	mul x3, x5, x16				// x3 = Yo * 512
+	add x3, x4, x3				// x3 = Xo + (Yo * 512)
+	mul x3, x17, x3				// x3 = 2 * (Xo + (Yo * 512))
+	add x10, x10, x3			// x10 = x0 + 2 * (Xo + (Yo * 512))  -> Fórmula del enunciado
+	mov x8, x5					// Yi = Yo
+	sub x3, x6, x4				// x3 = Xf - Xo
+	mul x3, x17, x3				// x3 = 2 * (Xf -Xo) 
+	sub x3, x16, x3 			// x3 = 512 - 2 * (Xf -Xo)
+	add x3, x16, x3				// x3 = 1024 - 2 * (Xf -Xo)
+	mov w3, 0xF4B6				// 0xf4b6 = Fucsia
+	sub x2, x7, x5				// Y = Yf - Yi
+	add x2, x2, #1				// Y = 1 + Yf - Yi
+R1:
+	sub x1, x6, x4				// Simplemente reseteamos la coordenada de Xi = Xo
+	add x1, x1, 1				// X = X + 1
+R0:
+	sturh w3, [x10]				// Cargo el color del pixel
+	add x10, x10, 2				// Avanzo un pixel
+	add x9, x9, 1				// Xi++
+	cmp x6, x9					// Xi - Xf 
+	b.ne R0						// Salta mientras Xi != Xf
+	add x8, x8, 1 				// Yi++
+	add x10, x10, x3			// x10 = x0 + (1024 - 2 * (Xf - Xo))
+	cmp x7, x8					// Yf - Yo
+	b.ne R1
+	br x30
+
+
+EL CÓDIGO QUE SIGUE SI ANDA:
+
+RectanguloParedes:
+iteracion2:
+	add x10, x0, 0	    		// X10 contiene la dirección base del framebuffer
+	mov x16, 1024       		//Toda la formula 
+	mov x17, 2          		// Auxiliar
+	mul x9, x5, x16     		// X9 = Yo * 1024
+	mul x14, x4, x17    		// x14 = 2 * Xo
+	add x9, x9, x14	   			// x9 = 2 * Xo + (Yo * 1024)
+	add x10, x10, x9    		// x10 = x0 + 2 * Xo + (Yo * 1024)
+	add x14, x5, 0				// x14 = Yo
+	mov w3, 0xF4B6				// 0xf4b6 = Fucsia
+iteracion1:
+	add x9, x4, 0    			// X = xo
+iteracion0:
+	sturh w3, [x10]	   			// Pinto
+	add x10, x10, 2	   			// Paso al siguiente pixel
+	add x9, x9, 1	   			// X--
+	cmp x9, x6               	// Xi - Xf
+	b.ne iteracion0				// Si Xi != Xf, entonces pasa a repetirse
+	add x14, x14, 1	   			// Yi ++
+	sub x15, x6, x4		
+	mul x15, x15, x17	
+	sub x15, x16, x15	
+	add x10, x10, x15     
+	cmp x14, x7
+	b.ne iteracion1	  	
+	br x30 	
+
+mov w20, PERIPHERAL_BASE + GPIO_BASE     // Dirección de los GPIO.		
+	
+	// Configurar GPIOs como input:
+	mov X21,#0
+	str w21,[x20,GPIO_GPFSEL1] 		// Coloco 0 en Function Select 1 (base + 4)  
+
+    // Configurar GPIO 2 y 3 como output:
+	mov X22,#0x240
+	str w22,[x20, 0]    	
+	
+    //-------------------------------------------- Main code ------------------------------------------------//
+    // X0 contiene la dirección base del framebuffer (NO MODIFICAR)
+
+	mov X21, #0x240    			// En binario, 1100
+    str w21, [x20, 0] 			// Seteo los GPIO 2 y 3 como OUTPUT (base)
+      	
+    mov w21, 0x4				// Esto selecciona el GPIO 2 (rojo)
+    str w21, [x20, 0x1C]		// Esto prende el led
+
+
+
+
+CODIGO DE LA PRIMERA PARTE:
+
+
+PintarLinea:				// ADVERTENCIA: La logica funciona siempre y cuando Xf >= Xo
+	mov x9, x4				// Asigno mi primer valor de Xi
+	mov x15, x5				// Asigno mi primer valor de Yi
+	sub x12, x7, x5			// x12 = Yf - Yo
+	sub x13, x6, x4			// x13 = Xf - Xo
+	mul x16, x12, x4		// a = (Yf - Yo) * Xo
+	sdiv x16, x16, x13		// a = ((Yf - Yo) * Xo) / (Xf - Xo)
+	sub x16, x5, x16		// a = Yo - ((Yf - Yo) * Xo) / (Xf - Xo)
+	cbz x12, PintarLineaHorizontal
+	cmp x12, xzr			// Comparo
+	b.eq PintarLineaVertical 
+	b.lt PintarLineaNeg		// Si x12 es negativo, entonces la pendiente es negativa, y es otra logica (salto)
+	subs x8, x12, x13		// Comparo
+	b.ge PintarLineaVP		// Si x12-x13 >= 0, M va a ser mayor a 1, entonces calculo los Yi en funcion de los Xi
+	b.lt PintarLineaHP		// Si x12-x13 < 0, M va a ser menor a 1, entonces calculo los Xi en funcion de los Yi
+PintarLineaNeg:
+	sub x12, xzr, x12		// Le cambio el signo a x12
+	subs x8, x12, x13		// Comparo
+	sub x12, xzr, x12		// Le vuelvo a cambiar el signo a x12, para que trabaje con el valor original
+	b.ge PintarLineaVN		// Si x12-x13 >= 0, M va a ser mayor a 1, entonces calculo los Yi en funcion de los Xi
+	b.lt PintarLineaHP		// Si x12-x13 < 0, M va a ser menor a 1, entonces calculo los Xi en funcion de los Yi
+endPintarLinea:
+	br x30
+
+PintarLineaHP:
+	cmp x6, x9				// Comparo Xf y Xi
+	b.eq endPintarLinea		// Sale del While
+	sub x10, x15, 2			// x10 = Yi - 2
+	mul x10, x10, x17		// x10 = (Yi - 2) * 512
+	add x10, x10, x9		// x10 = Xi + ((Yi - 2) * 512)
+	sub x10, x10, 2			// x10 = (Xi - 2) + ((Yi - 2) * 512)
+	add x10, x10, x10		// x10 = 2 * ((Xi - 2) + ((Yi - 2) * 512))
+	add x10, x10, x0		// x10 = x0 + 2 * ((Xi - 2) + ((Yi - 2) * 512))
+	mov x2, 3				// x2 = contador de Y
+loopPLHP1:
+	mov x1, 3				// x2 = contador de X
+loopPLHP0:
+	cmp x11, x10
+	b.lt EvadirPintarHP
+	sturh w3, [x10]
+EvadirPintarHP:
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loopPLHP0		// Comparo si x != 0, y si lo es reitero la iteracion
+	sub x2, x2, 1			// Estoy decrementando y
+	add x10, x10, 1014		// Estoy avanzando 507 pixeles (Fila de abajo)
+	cbnz x2, loopPLHP1		// Si Y != 0, pero llega que x == 0, entonces necesito reiniciar los valores de x
+	add x9, x9, 1			// estoy pasando al siguiente Xi: Xi++
+	// Calculo el respectivo Yi
+	mul x15, x12, x9		// Yi = (Yf - Yo) * Xi
+	sdiv x15, x15, x13 		// Yi = ((Yf - Yo) * Xi) / (Xf - Xo)
+	add x15, x15, x16		// Yi = a + ((Yf - Yo) * Xi) / (Xf - Xo)
+	b PintarLineaHP
+
+PintarLineaVP:
+	cmp x7, x15				// Comparo Yf y Yi
+    b.eq endPintarLinea		// Si Yi > Yf, terminamos (esto deberia ocurrir si Yf < Yi por error)
+	sub x10, x15, 2			// x10 = Yi -2
+	mul x10, x10, x17		// x10 = (Yi -2) * 512
+	add x10, x10, x9		// x10 = Xi + ((Yi -2) * 512)
+	sub x10, x10, 2			// x10 = (Xi - 2) + ((Yi -2) * 512)
+	add x10, x10, x10		// x10 = 2 * ((Xi - 2) + ((Yi -2) * 512))
+	add x10, x10, x0		// x10 = x0 + 2 * ((Xi - 2) + ((Yi -2) * 512))
+	mov x2, 3				// x2 = contador de Y
+loopPLVP1:
+	mov x1, 3
+loopPLVP0:
+	cmp x11, x10
+	b.lt EvadirPintarVP
+	sturh w3, [x10]
+EvadirPintarVP:
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loopPLVP0		// Comparo si x != 0, y si lo es reitero la iteracion
+	sub x2, x2, 1			// Estoy decrementando y
+	add x10, x10, 1018		// Estoy avanzando 507 pixeles (Fila de abajo)
+	cbnz x2, loopPLVP1		// Si Y != 0, pero llega que x == 0, entonces necesito reiniciar los valores de x
+	add x15, x15, 1		// estoy pasando al siguiente Yi: Yi++
+	// Calculo el respectivo Xi
+	sub x9, x15, x16		// Xi = (Yi - a)
+	mul x9, x9, x13			// Xi = (Yi - a) * (Xf - Xo)
+	sdiv x9, x9, x12		// Xi = (Yi - a) * (Xf - Xo) / (Yf - Yo)
+	b PintarLineaVP
+
+PintarLineaVN:
+	cmp x7, x15				// Comparo Yf y Yi
+    b.eq endPintarLinea		// Si Yi > Yf, terminamos (esto deberia ocurrir si Yf < Yi por error)
+	sub x10, x15, 2			// x10 = Yi -2
+	mul x10, x10, x17		// x10 = (Yi -2) * 512
+	add x10, x10, x9		// x10 = Xi + ((Yi -2) * 512)
+	sub x10, x10, 2			// x10 = (Xi - 2) + ((Yi -2) * 512)
+	add x10, x10, x10		// x10 = 2 * ((Xi - 2) + ((Yi -2) * 512))
+	add x10, x10, x0		// x10 = x0 + 2 * ((Xi - 2) + ((Yi -2) * 512))
+	mov x2, 3				// x2 = contador de Y
+loopPLVN1:
+	mov x1, 3
+loopPLVN0:
+	cmp x11, x10
+	b.lt EvadirPintarVN
+	sturh w3, [x10]
+EvadirPintarVN:
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loopPLVN0		// Comparo si x != 0, y si lo es reitero la iteracion
+	sub x2, x2, 1			// Estoy decrementando y
+	add x10, x10, 1014		// Estoy avanzando 507 pixeles (Fila de abajo)
+	cbnz x2, loopPLVN1		// Si Y != 0, pero llega que x == 0, entonces necesito reiniciar los valores de x
+	sub x15, x15, 1			// estoy pasando al siguiente Yi: Yi++
+	// Calculo el respectivo Xi
+	sub x9, x15, x16		// Xi = (Yi - a)
+	mul x9, x9, x13			// Xi = (Yi - a) * (Xf - Xo)
+	sdiv x9, x9, x12		// Xi = (Yi - a) * (Xf - Xo) / (Yf - Yo)
+	b PintarLineaVN
+
+PintarLineaVertical:
+	cmp x7, x15				// Comparo Yf y Yi
+    b.gt endPintarLinea		// Si Yi > Yf, terminamos (esto deberia ocurrir si Yf < Yi por error)
+    // Calculo de la direccion de memoria inicial
+    sub x10, x15, 2		// x10 = Yi - 2
+    lsl x10, x10, 9 		// x10 = (Yi - 2) * 512
+    add x10, x10, x4 		// x10 = Xi + ((Yi - 2) * 512)
+    sub x10, x10, 2		// x10 = (Xi - 2) + ((Yi - 2) * 512)
+    lsl x10, x10, 1		// x10 = 2 * ((Xi - 2) + ((Yi - 2) * 512))
+    add x10, x10, x0		// x10 = x0 + 2 * ((Xi - 2) + ((Yi - 2) * 512))
+	mov x2, 3				// x2 = contador de Y
+loopPLV1:
+	mov x1, 3				// x2 = contador de X
+loopPLV0:
+	cmp x11, x10
+	b.lt EvadirPintarV
+	sturh w3, [x10]
+EvadirPintarV:
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loopPLV0		// Comparo si x != 0, y si lo es reitero la iteracion
+	sub x2, x2, 1			// Estoy decrementando y
+	add x10, x10, 1014		// Estoy avanzando 507 pixeles (Fila de abajo)
+	cbnz x2, loopPLV1		// Si Y != 0, pero llega que x == 0, entonces necesito reiniciar los valores de x
+	add x15, x15, 1		// estoy pasando al siguiente Yi: Yi++
+	b PintarLineaVertical
+
+PintarLineaHorizontal:
+	cmp x6, x9				// Comparo Xf y Xi
+    b.gt endPintarLinea		// Si Xi > Xf, terminamos (esto deberia ocurrir si Xf < Xi por error)
+    // Calculo de la direccion de memoria inicial
+    sub x10, x15, 2		// x10 = Yi - 2
+    mul x10, x10, x17 		// x10 = (Yi - 2) * 512
+    add x10, x10, x4 		// x10 = Xi + ((Yi - 2) * 512)
+    sub x10, x10, 2		// x10 = (Xi - 2) + ((Yi - 2) * 512)
+    lsl x10, x10, 1		// x10 = 2 * ((Xi - 2) + ((Yi - 2) * 512))
+    add x10, x10, x0		// x10 = x0 + 2 * ((Xi - 2) + ((Yi - 2) * 512))
+	mov x2, 3				// x2 = contador de Y
+loopPLH1:
+	mov x1, 3				// x2 = contador de X
+loopPLH0:
+	cmp x11, x10
+	b.lt EvadirPintarH
+	sturh w3, [x10]
+EvadirPintarH:
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loopPLH0		// Comparo si x != 0, y si lo es reitero la iteracion
+	sub x2, x2, 1			// Estoy decrementando y
+	add x10, x10, 1014		// Estoy avanzando 507 pixeles (Fila de abajo)
+	cbnz x2, loopPLH1		// Si Y != 0, pero llega que x == 0, entonces necesito reiniciar los valores de x
+	add x9, x9, 1			// estoy pasando al siguiente Xi: Xi++
+	b PintarLineaHorizontal
+
+ParalelogramoHH:
+	// x22: Xz para pintar
+	// x23: Yz para pintar
+	// x24: Yz - Yo
+	// x25: Xz - Xo
+	// x26: Xz para mover el x0
+	// x27: Yz para mover el y0
+// x4: Xo para pintar
+// x5: Yo para pintar
+// x6: Xf para pintar 
+// x7: Yf para pintar 
+
+	sub x24, x5, x23			// x24 = Yo - Yz
+	sub x25, x4, x22			// x25 = Xo - Xz
+
+	mul x26, x24, x4		// a = (Yz - Yo) * Xo
+	sdiv x26, x26, x25		// a = ((Yz - Yo) * Xo) / (Xz - Xo)
+	sub x26, x5, x26		// a = Yo - ((Yz - Yo) * Xo) / (Xz - Xo)
+
+	sub x24, x23, x5			// x24 = Yz - Yo
+	sub x25, x22, x4			// x25 = Xz - Xo
+	bl PintarLinea
+
+IterarHH:
+	cmp x5, x23
+	b.le endParalelogramoHH
+
+	sub x5, x5, 1				// Yo --
+	sub x7, x7, 1				// Yf --
+
+	sub x9, x5, x26			// Xi = (Yi - a)
+	mul x9, x9, x25			// Xi = (Yi - a) * (Xf - Xo)
+	udiv x9, x9, x24		// Xi = (Yi - a) * (Xf - Xo) / (Yf - Yo)
+
+	sub x26, x9, x4			// x26 = X0 - Xi
+	add x4, x4, x26			// Xo = Xo + cte
+	add x6, x6, x26			// Xf = Xf + cte
+
+	bl PintarLinea
+	b IterarHH
+
+endParalelogramoHH:
+	br x30
+
+ParalelogramoPositivo:
+	// x22: Xz para pintar
+	// x23: Yz para pintar
+	// x24: Yz - Yo
+	// x25: Xz - Xo
+	// x26: Xz para mover el x0
+	// x27: Yz para mover el y0
+// x4: Xo para pintar
+// x5: Yo para pintar
+// x6: Xf para pintar 
+// x7: Yf para pintar 
+
+	sub x24, x23, x5			// x24 = Yz - Yo
+	sub x25, x22, x4			// x25 = Xz - Xo
+
+	mul x26, x24, x4		// a = (Yz - Yo) * Xo
+	sdiv x26, x26, x25		// a = ((Yz - Yo) * Xo) / (Xz - Xo)
+	sub x26, x5, x26		// a = Yo - ((Yz - Yo) * Xo) / (Xz - Xo)
+	bl PintarLinea
+
+IterarPS:
+	
+	cmp x23, x5
+	b.eq endParalelogramoP
+
+	sub x5, x5, 1				// Yo ++
+	sub x7, x7, 1
+	// Calculo el respectivo Xi
+	sub x24, x23, x5			// x24 = Yz - Yo
+	sub x25, x22, x4			// x25 = Xz - Xo
+
+	// Calculo el respectivo Yi
+	mul x15, x24, x9		// Yi = (Yf - Yo) * Xi
+	sdiv x15, x15, x13 		// Yi = ((Yf - Yo) * Xi) / (Xf - Xo)
+	add x15, x15, x16		// Yi = a + ((Yf - Yo) * Xi) / (Xf - Xo)
+
+	sub x9, x5, x26			// Xi = (Yi - a)
+	mul x9, x9, x25			// Xi = (Yi - a) * (Xf - Xo)
+	sdiv x9, x9, x24		// Xi = (Yi - a) * (Xf - Xo) / (Yf - Yo)
+
+	sub x26, x4, x9			// x26 = X0 - Xi
+	sub x4, x4, x26			// Xo = Xo + cte
+	sub x6, x6, x26			// Yo = Yo + cte
+	bl PintarLinea	
+	b IterarPS
+
+endParalelogramoP:
+	br x30
+
+
+TreintaGrande:
+	sturh w3, [x10]		// Pintamos el primer pixel
+	add x10, x10, 1022		// Pasamos a la siguiente fila
+	mov x1, 3				// Ponemos el contador de X
+loop1TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop1TGI
+
+	add x10, x10, 1016		// Pasamos a la siguiente fila
+	mov x1, 5				// Ponemos el contador de X
+loop2TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop2TGI
+
+	add x10, x10, 1012		// Pasamos a la siguiente fila
+	mov x1, 8				// Ponemos el contador de X
+loop3TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop3TGI
+
+	add x10, x10, 1008		// Pasamos a la siguiente fila
+	mov x1, 9				// Ponemos el contador de X
+loop4TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop4TGI
+
+	add x10, x10, 1004		// Pasamos a la siguiente fila
+	mov x1, 12				// Ponemos el contador de X
+loop5TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop5TGI
+
+	add x10, x10, 998		// Pasamos a la siguiente fila
+	mov x1, 14				// Ponemos el contador de X
+loop6TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop6TGI
+
+	add x10, x10, 994		// Pasamos a la siguiente fila
+	mov x1, 17				// Ponemos el contador de X
+loop7TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop7TGI
+
+	add x10, x10, 990		// Pasamos a la siguiente fila
+	mov x1, 19				// Ponemos el contador de X
+loop8TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop8TGI
+
+	add x10, x10, 984		// Pasamos a la siguiente fila
+	mov x1, 21				// Ponemos el contador de X
+loop9TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop9TGI
+
+	add x10, x10, 980		// Pasamos a la siguiente fila
+	mov x1, 24				// Ponemos el contador de X
+loop10TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop10TGI
+
+	add x10, x10, 974		// Pasamos a la siguiente fila
+	mov x1, 26				// Ponemos el contador de X
+loop11TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop11TGI
+
+	add x10, x10, 972		// Pasamos a la siguiente fila
+	mov x1, 28				// Ponemos el contador de X
+loop12TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop12TGI
+
+	add x10, x10, 972		// Pasamos a la siguiente fila
+	mov x1, 27				// Ponemos el contador de X
+loop13TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop13TGI
+
+	add x10, x10, 974		// Pasamos a la siguiente fila
+	mov x1, 27				// Ponemos el contador de X
+loop14TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop14TGI
+
+	add x10, x10, 972		// Pasamos a la siguiente fila
+	mov x1, 28				// Ponemos el contador de X
+loop15TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop15TGI
+
+	add x10, x10, 972		// Pasamos a la siguiente fila
+	mov x1, 27				// Ponemos el contador de X
+loop16TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop16TGI
+
+	add x10, x10, 974		// Pasamos a la siguiente fila
+	mov x1, 28				// Ponemos el contador de X
+loop17TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop17TGI
+
+	add x10, x10, 972		// Pasamos a la siguiente fila
+	mov x1, 27				// Ponemos el contador de X
+loop18TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop18TGI
+
+	add x10, x10, 974		// Pasamos a la siguiente fila
+	mov x1, 27				// Ponemos el contador de X
+loop19TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop19TGI
+
+	add x10, x10, 972		// Pasamos a la siguiente fila
+	mov x1, 28				// Ponemos el contador de X
+loop20TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop20TGI
+
+	add x10, x10, 972		// Pasamos a la siguiente fila
+	mov x1, 26				// Ponemos el contador de X
+loop21TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop21TGI
+
+	add x10, x10, 974		// Pasamos a la siguiente fila
+	mov x1, 24				// Ponemos el contador de X
+loop22TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop22TGI
+
+	add x10, x10, 980		// Pasamos a la siguiente fila
+	mov x1, 21				// Ponemos el contador de X
+loop23TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop23TGI
+
+	add x10, x10, 984		// Pasamos a la siguiente fila 
+	mov x1, 19				// Ponemos el contador de X
+loop24TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop24TGI
+
+	add x10, x10, 990		// Pasamos a la siguiente fila
+	mov x1, 17				// Ponemos el contador de X
+loop25TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop25TGI
+
+	add x10, x10, 994		// Pasamos a la siguiente fila998
+	mov x1, 14				// Ponemos el contador de X
+loop26TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop26TGI
+
+	add x10, x10, 998		// Pasamos a la siguiente fila
+	mov x1, 12				// Ponemos el contador de X
+loop27TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop27TGI
+
+	add x10, x10, 1004		// Pasamos a la siguiente fila
+	mov x1, 9				// Ponemos el contador de X
+loop28TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop28TGI
+
+	add x10, x10, 1008		// Pasamos a la siguiente fila
+	mov x1, 8				// Ponemos el contador de X
+loop29TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop29TGI
+
+	add x10, x10, 1012		// Pasamos a la siguiente fila
+	mov x1, 5				// Ponemos el contador de X
+loop30TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop30TGI
+
+	add x10, x10, 1016		// Pasamos a la siguiente fila
+	mov x1, 3				// Ponemos el contador de X
+loop31TGI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop31TGI
+
+	add x10, x10, 1022		// Pasamos a la siguiente fila
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTGI				// Si pasamos el limite salimos
+	sturh w3, [x10]		// Pintamos el ultimo pixel
+
+// se repite: 1, 3, 5, 8, 9, 12, 14, 17, 19, 21, 24, 26, 28, 27, 27, 28, 27, REVERSA (DESDE 28)
+endTGI:
+	br x30 					// Return
+
+TreintaMediano:
+	sturh w3, [x10]		// Pintamos el primer pixel
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTMI				// Si pasamos el limite salimos
+	sturh w3, [x10]		// Pintamos el primer pixel
+
+	add x10, x10, 1020		// Pasamos a la siguiente fila
+	mov x1, 3				// Ponemos el contador de X
+loop1TMI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTMI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop1TMI
+
+	add x10, x10, 1016		// Pasamos a la siguiente fila
+	mov x1, 6				// Ponemos el contador de X
+loop2TMI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTMI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop2TMI
+
+	add x10, x10, 1010		// Pasamos a la siguiente fila
+	mov x1, 8				// Ponemos el contador de X
+loop3TMI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTMI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop3TMI
+
+	add x10, x10, 1006		// Pasamos a la siguiente fila
+	mov x1, 11				// Ponemos el contador de X
+loop4TMI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTMI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop4TMI
+
+	add x10, x10, 1000		// Pasamos a la siguiente fila
+	mov x1, 14				// Ponemos el contador de X
+loop5TMI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTMI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop5TMI
+
+	add x10, x10, 996		// Pasamos a la siguiente fila
+	mov x1, 15				// Ponemos el contador de X
+loop6TMI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTMI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop6TMI
+
+	add x10, x10, 992		// Pasamos a la siguiente fila
+	mov x1, 18				// Ponemos el contador de X
+loop7TMI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTMI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop7TMI
+
+	add x10, x10, 986		// Pasamos a la siguiente fila
+	mov x1, 20				// Ponemos el contador de X
+loop8TMI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTMI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop8TMI
+
+	add x10, x10, 986		// Pasamos a la siguiente fila
+	mov x1, 21				// Ponemos el contador de X
+loop9TMI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTMI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop9TMI
+
+	add x10, x10, 986		// Pasamos a la siguiente fila
+	mov x1, 20				// Ponemos el contador de X
+loop10TMI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTMI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop10TMI
+
+	add x10, x10, 988		// Pasamos a la siguiente fila
+	mov x1, 20				// Ponemos el contador de X
+loop11TMI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTMI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop11TMI
+
+	add x10, x10, 986		// Pasamos a la siguiente fila
+	mov x1, 20				// Ponemos el contador de X
+loop12TMI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTMI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop12TMI
+
+	add x10, x10, 988		// Pasamos a la siguiente fila
+	mov x1, 20				// Ponemos el contador de X
+loop13TMI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTMI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop13TMI
+
+	add x10, x10, 986		// Pasamos a la siguiente fila
+	mov x1, 21				// Ponemos el contador de X
+loop14TMI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTMI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop14TMI
+
+	add x10, x10, 986		// Pasamos a la siguiente fila
+	mov x1, 20				// Ponemos el contador de X
+loop15TMI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTMI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop15TMI
+
+	add x10, x10, 986		// Pasamos a la siguiente fila
+	mov x1, 18				// Ponemos el contador de X
+loop16TMI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTMI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop16TMI
+
+	add x10, x10, 992		// Pasamos a la siguiente fila 
+	mov x1, 15				// Ponemos el contador de X
+loop17TMI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTMI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop17TMI
+
+	add x10, x10, 996		// Pasamos a la siguiente fila
+	mov x1, 14				// Ponemos el contador de X
+loop18TMI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTMI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop18TMI
+
+	add x10, x10, 1000		// Pasamos a la siguiente fila
+	mov x1, 11				// Ponemos el contador de X
+loop19TMI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTMI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop19TMI
+
+	add x10, x10, 1006		// Pasamos a la siguiente fila
+	mov x1, 8				// Ponemos el contador de X
+loop20TMI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTMI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop20TMI
+
+	add x10, x10, 1010		// Pasamos a la siguiente fila
+	mov x1, 6				// Ponemos el contador de X
+loop21TMI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTMI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop21TMI
+
+	add x10, x10, 1016		// Pasamos a la siguiente fila
+	mov x1, 3				// Ponemos el contador de X
+loop22TMI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTMI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop22TMI
+
+	add x10, x10, 1020		// Pasamos a la siguiente fila
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTMI				// Si pasamos el limite salimos
+	sturh w3, [x10]		// Pintamos el primer pixel
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTMI				// Si pasamos el limite salimos
+	sturh w3, [x10]		// Pintamos el primer pixel
+
+// se repite: 2, 3, 6, 8, 11, 14, 15, 18, 20, 21, 20, 20 REVERSA
+endTMI:
+	br x30 					// Return
+
+TreintaChico:
+	sturh w3, [x10]		// Pintamos el primer pixel
+	add x10, x10, 1022		// Pasamos a la siguiente fila
+	mov x1, 3				// Ponemos el contador de X
+loop1TCI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTCI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop1TCI
+
+	add x10, x10, 1016		// Pasamos a la siguiente fila
+	mov x1, 5				// Ponemos el contador de X
+loop2TCI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTCI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop2TCI
+
+	add x10, x10, 1014		// Pasamos a la siguiente fila
+	mov x1, 7				// Ponemos el contador de X
+loop3TCI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTCI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop3TCI
+
+	add x10, x10, 1008		// Pasamos a la siguiente fila
+	mov x1, 10				// Ponemos el contador de X
+loop4TCI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTCI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop4TCI
+
+	add x10, x10, 1002		// Pasamos a la siguiente fila
+	mov x1, 12				// Ponemos el contador de X
+loop5TCI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTCI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop5TCI
+
+	add x10, x10, 1000		// Pasamos a la siguiente fila
+	mov x1, 14				// Ponemos el contador de X
+loop6TCI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTCI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop6TCI
+
+	add x10, x10, 1000		// Pasamos a la siguiente fila
+	mov x1, 13				// Ponemos el contador de X
+loop7TCI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTCI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop7TCI
+
+	add x10, x10, 1002		// Pasamos a la siguiente fila
+	mov x1, 13				// Ponemos el contador de X
+loop8TCI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTCI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop8TCI
+
+	add x10, x10, 1000		// Pasamos a la siguiente fila
+	mov x1, 14				// Ponemos el contador de X
+loop9TCI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTCI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop9TCI
+
+	add x10, x10, 1000		// Pasamos a la siguiente fila
+	mov x1, 12				// Ponemos el contador de X
+loop10TCI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTCI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop10TCI
+
+	add x10, x10, 1002		// Pasamos a la siguiente fila
+	mov x1, 10				// Ponemos el contador de X
+loop11TCI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTCI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop11TCI
+
+	add x10, x10, 1008		// Pasamos a la siguiente fila
+	mov x1, 7				// Ponemos el contador de X
+loop12TCI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTCI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop12TCI
+
+	add x10, x10, 1014		// Pasamos a la siguiente fila
+	mov x1, 5				// Ponemos el contador de X
+loop13TCI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTCI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop13TCI
+
+	add x10, x10, 1016		// Pasamos a la siguiente fila
+	mov x1, 3				// Ponemos el contador de X
+loop14TCI:
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTCI				// Si pasamos el limite salimos
+	sturh w3, [x10]
+	add x10, x10, 2 		// Estoy pasando al siguiente pixel
+	sub x1, x1, 1 			// Estoy decrementando x
+	cbnz x1, loop14TCI
+
+	add x10, x10, 1022		// Pasamos a la siguiente fila
+	cmp x11, x10			// verifica que x11-x10 > 0
+	b.eq endTCI				// Si pasamos el limite salimos
+	sturh w3, [x10]		// Pintamos el ultimo pixel
+
+// se repite: 1, 3, 5, 7, 10, 12, 14, 13, 13, 14, 12, 10, 7, 5, 3, 1
+endTCI:
+	br x30					// Return
